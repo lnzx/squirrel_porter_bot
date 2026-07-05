@@ -1,6 +1,7 @@
 package tg
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gotd/td/telegram/uploader"
 	"github.com/gotd/td/tg"
@@ -75,7 +77,7 @@ func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string)
 func (c *Client) sendSinglePhoto(chatId int64, img string, caption string) error {
 	ctx := c.Ctx
 	// 1. 上传文件到 Telegram（还没发给任何人）
-	f, err := uploader.NewUploader(ctx.Raw).FromPath(ctx, img)
+	f, err := c.newUploader().FromPath(ctx, img)
 	if err != nil {
 		return err
 	}
@@ -97,7 +99,7 @@ func (c *Client) sendSinglePhoto(chatId int64, img string, caption string) error
 // sendSingleVideo 只上传mp4视频
 func (c *Client) sendSingleVideo(chatId int64, video string, caption string) error {
 	ctx := c.Ctx
-	up := uploader.NewUploader(ctx.Raw)
+	up := c.newUploader()
 
 	videoFile, err := up.FromPath(ctx, video)
 	if err != nil {
@@ -138,7 +140,7 @@ func (c *Client) sendSingleVideo(chatId int64, video string, caption string) err
 
 func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	ctx := c.Ctx
-	up := uploader.NewUploader(ctx.Raw)
+	up := c.newUploader()
 
 	peer, err := ctx.ResolveInputPeerById(chatId)
 	if err != nil {
@@ -252,6 +254,18 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	return err
 }
 
+func (c *Client) newUploader() *uploader.Uploader {
+	threads := c.UploadThreads
+	if threads <= 0 {
+		threads = defaultThreads // 默认线程数
+	}
+
+	return uploader.NewUploader(c.Ctx.Raw).
+		WithThreads(threads).
+		WithPartSize(uploader.MaximumPartSize).
+		WithProgress(&consoleProgress{}) // 每次调用都是新实例，天然按文件独立算百分比
+}
+
 // ResolveGlobPaths 接收原始参数列表，返回展开后的文件路径列表
 func ResolveGlobPaths(targets []string) ([]string, error) {
 	var fileList []string
@@ -328,4 +342,31 @@ func getVideoAttrs(path string) (w, h int, duration float64, err error) {
 		}
 	}
 	return 0, 0, 0, fmt.Errorf("no video stream found")
+}
+
+type consoleProgress struct {
+	mu      sync.Mutex
+	lastPct int
+}
+
+func (p *consoleProgress) Chunk(ctx context.Context, state uploader.ProgressState) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if state.Total <= 0 {
+		fmt.Printf("\r%s: 已上传 %d 字节", state.Name, state.Uploaded)
+		return nil
+	}
+
+	pct := int(float64(state.Uploaded) / float64(state.Total) * 100)
+	if pct == p.lastPct {
+		return nil
+	}
+	p.lastPct = pct
+
+	fmt.Printf("\r%s: %d%%", state.Name, pct)
+	if pct >= 100 {
+		fmt.Println()
+	}
+	return nil
 }

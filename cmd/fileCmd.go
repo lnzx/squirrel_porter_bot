@@ -35,6 +35,12 @@ var UploadCmd = &cli.Command{
 			Aliases: []string{"s"},
 			Usage:   "upload files one by one, each file is an independent message",
 		},
+		&cli.IntFlag{
+			Name:    "threads",
+			Aliases: []string{"t"},
+			Value:   4,
+			Usage:   "sets downloading goroutines limit",
+		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		if c.NArg() < 1 {
@@ -47,7 +53,9 @@ var UploadCmd = &cli.Command{
 		channel := c.String("channel")
 		caption := c.String("caption")
 		separate := c.Bool("separate")
+		threads := c.Int("threads")
 		client := tg.FromContext(ctx) // ← 这里拿到之前 Before 里存的 tg.Context
+		client.UploadThreads = threads
 		return client.Upload(channel, targets, caption, separate)
 	},
 }

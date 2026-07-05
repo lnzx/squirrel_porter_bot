@@ -10,8 +10,9 @@ import (
 )
 
 type Client struct {
-	Ctx    *ext.Context
-	client *gotgproto.Client
+	Ctx           *ext.Context
+	UploadThreads int
+	client        *gotgproto.Client
 }
 
 func NewClient(ctx context.Context, apiId int, apiHash string, botToken string) (*Client, error) {
@@ -34,8 +35,9 @@ func NewClient(ctx context.Context, apiId int, apiHash string, botToken string) 
 	}
 
 	return &Client{
-		Ctx:    client.CreateContext(),
-		client: client,
+		Ctx:           client.CreateContext(),
+		client:        client,
+		UploadThreads: defaultThreads,
 	}, nil
 }
 
