@@ -123,7 +123,7 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	}
 
 	multiMedia := make([]tg.InputSingleMedia, 0, len(paths))
-	for _, path := range paths {
+	for i, path := range paths {
 		// 1. 逐个上传文件
 		f, err := up.FromPath(ctx, path)
 		if err != nil {
@@ -206,10 +206,13 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			return fmt.Errorf("unexpected media type %T for %s", registered, path)
 		}
 
-		// 4. 每个文件独立的 Message：caption 有值就用 caption，没有就用自己的文件名
-		msg := caption
-		if msg == "" {
-			msg = filepath.Base(path)
+		msg := ""
+		if i == 0 {
+			if caption != "" {
+				msg = caption
+			} else {
+				msg = filepath.Base(path)
+			}
 		}
 
 		multiMedia = append(multiMedia, tg.InputSingleMedia{
