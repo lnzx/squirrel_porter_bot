@@ -28,3 +28,7 @@ cache/
 .reasonix
 
 *.session
+
+.tokensave/
+
+CLAUDE.md

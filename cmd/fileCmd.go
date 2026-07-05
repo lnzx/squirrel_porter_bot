@@ -75,13 +75,13 @@ var DownloadCmd = &cli.Command{
 			Name:    "threads",
 			Aliases: []string{"t"},
 			Value:   4,
-			Usage:   "sets downloading goroutines limit (0 disables)",
+			Usage:   "sets downloading goroutines limit (0 uses default)",
 		},
 		&cli.IntFlag{
 			Name:    "part-size",
 			Aliases: []string{"p"},
 			Value:   tg.DefaultPartSize,
-			Usage:   "sets chunk size. Must be divisible by 4KB (Max 1MiB, 0 disables)",
+			Usage:   "sets chunk size. Must be divisible by 4KB (Max 1MiB, 0 uses default)",
 		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
@@ -89,9 +89,10 @@ var DownloadCmd = &cli.Command{
 			return errors.New("download requires at least one <file_url> argument")
 		}
 		link := c.Args().First()
+		output := c.String("output")
 		threads := c.Int("threads")
 		partSize := c.Int("part-size")
 		client := tg.FromContext(ctx)
-		return client.DownloadFromLink(link, threads, partSize)
+		return client.DownloadFromLink(link, output, threads, partSize)
 	},
 }

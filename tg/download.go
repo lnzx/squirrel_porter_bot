@@ -20,7 +20,7 @@ const (
 	DefaultPartSize = 1024 * 1024 // 1 MB，Telegram 允许的最大值 ✅
 )
 
-func (c *Client) DownloadFromLink(link string, threads int, partSize int) error {
+func (c *Client) DownloadFromLink(link string, output string, threads int, partSize int) error {
 	username, msgId, err := ParsePublicLink(link)
 	if err != nil {
 		return err
@@ -57,6 +57,13 @@ func (c *Client) DownloadFromLink(link string, threads int, partSize int) error 
 
 	// 3. 确定保存文件名（可选：从 Document 的 attributes 里取原始文件名）
 	fileName := generateSmartName(msg, msgId)
+	// 若指定了输出目录/路径，拼接到文件名前
+	if output != "" {
+		if err = os.MkdirAll(output, 0o755); err != nil {
+			return err
+		}
+		fileName = filepath.Join(output, fileName)
+	}
 
 	// 获取文件大小（为了初始化进度条）
 	var fileSize int64
@@ -64,6 +71,10 @@ func (c *Client) DownloadFromLink(link string, threads int, partSize int) error 
 		if doc, ok := mmd.Document.(*tg.Document); ok {
 			fileSize = doc.Size
 		}
+	}
+	// 大小未知时用 -1，进度条会以不定长(spinner)模式显示，而非停在 0
+	if fileSize <= 0 {
+		fileSize = -1
 	}
 
 	// 初始化进度条
@@ -100,7 +111,7 @@ func (c *Client) DownloadFromLink(link string, threads int, partSize int) error 
 		ext.DownloadOutputParallel{WriterAt: progressWriter},
 		&ext.DownloadMediaOpts{
 			Threads:  Value(threads, defaultThreads),
-			PartSize: Value(partSize, DefaultPartSize),
+			PartSize: actualPartSize,
 		},
 	)
 	return err
@@ -150,9 +161,9 @@ func sanitizeFileName(name string) string {
 	for _, s := range illegals {
 		name = strings.ReplaceAll(name, s, "_")
 	}
-	// 限制长度，避免过长导致路径错误
-	if len(name) > 100 {
-		name = name[:100]
+	// 限制长度，避免过长导致路径错误（按 rune 截断，避免破坏多字节字符）
+	if r := []rune(name); len(r) > 100 {
+		name = string(r[:100])
 	}
 	return name
 }

@@ -56,6 +56,7 @@ func (c *Client) Upload(channel string, targets []string, caption string, separa
 // sendFilesOneByOne 逐个上传文件，每个文件独立成一条消息
 func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string) error {
 	log.Println("upload files one by one, total:", len(files))
+	failed := 0
 	for i, path := range files {
 		log.Printf("%d uploading %s\n", i, path)
 
@@ -67,8 +68,13 @@ func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string)
 		}
 		if err != nil {
 			log.Printf("%d 上传文件失败, 跳过 %s: %s\n", i, path, err)
+			failed++
 			continue
 		}
+	}
+	// 全部失败时返回错误，避免调用方误以为成功
+	if failed == len(files) {
+		return fmt.Errorf("所有文件上传失败 (%d 个)", failed)
 	}
 	return nil
 }
@@ -118,14 +124,20 @@ func (c *Client) sendSingleVideo(chatId int64, path string, caption string) erro
 		caption = filepath.Base(path)
 	}
 
+	videoAttr := &tg.DocumentAttributeVideo{SupportsStreaming: true}
+	// 补充宽/高/时长，缺失会导致预览和拖动体验变差；取不到则降级为仅流式发送
+	if w, h, duration, err := getVideoAttrs(path); err != nil {
+		log.Println("get video attrs error, send without dimensions:", err)
+	} else {
+		videoAttr.W, videoAttr.H, videoAttr.Duration = w, h, duration
+	}
+
 	doc := &tg.InputMediaUploadedDocument{
 		File:     videoFile,
 		MimeType: "video/mp4",
 		Attributes: []tg.DocumentAttributeClass{
-			&tg.DocumentAttributeFilename{FileName: caption},
-			&tg.DocumentAttributeVideo{
-				SupportsStreaming: true,
-			},
+			&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
+			videoAttr,
 		},
 	}
 
@@ -146,7 +158,29 @@ func (c *Client) sendSingleVideo(chatId int64, path string, caption string) erro
 	return err
 }
 
+// Telegram 相册（media group）单条最多 10 个媒体
+const maxAlbumSize = 10
+
+// sendAlbum 按每 10 个一批分组发送，避免超过 Telegram 相册上限。
+// caption 只放在第一批的第一条，后续批次不带说明。
 func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
+	for i := 0; i < len(paths); i += maxAlbumSize {
+		end := i + maxAlbumSize
+		if end > len(paths) {
+			end = len(paths)
+		}
+		batchCaption := ""
+		if i == 0 {
+			batchCaption = caption
+		}
+		if err := c.sendAlbumBatch(chatId, paths[i:end], batchCaption); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Client) sendAlbumBatch(chatId int64, paths []string, caption string) error {
 	ctx := c.Ctx
 
 	peer, err := ctx.ResolveInputPeerById(chatId)
@@ -315,7 +349,14 @@ func ResolveGlobPaths(targets []string) ([]string, error) {
 				}
 			}
 		} else {
-			// 如果没有通配符，则直接添加（假设它是具体的文件路径）
+			// 没有通配符，当作具体路径：校验存在性并排除目录
+			info, err := os.Stat(pattern)
+			if err != nil {
+				return nil, fmt.Errorf("获取文件信息: %s: %w", pattern, err)
+			}
+			if info.IsDir() {
+				return nil, fmt.Errorf("不支持上传目录: %s", pattern)
+			}
 			fileList = append(fileList, pattern)
 		}
 	}

@@ -48,3 +48,10 @@ func (c *Client) getChatIdByUsername(username string) (int64, error) {
 	}
 	return chat.GetID(), nil
 }
+
+// Stop 优雅关闭底层 gotgproto 客户端（取消内部 context）
+func (c *Client) Stop() {
+	if c.client != nil {
+		c.client.Stop()
+	}
+}

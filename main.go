@@ -71,6 +71,13 @@ func main() {
 			// CreateContext 返回的 *ext.Context 建议全局复用，不要每个子命令重新创建
 			return tg.WithContext(ctx, client), nil
 		},
+		After: func(ctx context.Context, c *cli.Command) error {
+			// 命令结束（无论成功或失败）优雅关闭客户端
+			if client := tg.FromContext(ctx); client != nil {
+				client.Stop()
+			}
+			return nil
+		},
 		Commands: []*cli.Command{
 			cmd.FileCmd,
 		},
