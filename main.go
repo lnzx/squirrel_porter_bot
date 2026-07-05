@@ -74,13 +74,6 @@ func main() {
 		Commands: []*cli.Command{
 			cmd.FileCmd,
 		},
-		After: func(ctx context.Context, c *cli.Command) error {
-			client := tg.FromContext(ctx)
-			if client != nil {
-				client.Stop()
-			}
-			return nil
-		},
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

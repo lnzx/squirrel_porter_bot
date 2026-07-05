@@ -2,7 +2,6 @@ package tg
 
 import (
 	"context"
-	"log"
 
 	"github.com/celestix/gotgproto"
 	"github.com/celestix/gotgproto/ext"
@@ -46,11 +45,4 @@ func (c *Client) getChatIdByUsername(username string) (int64, error) {
 		return 0, err
 	}
 	return chat.GetID(), nil
-}
-
-func (c *Client) Stop() {
-	if c.client != nil {
-		c.client.Stop()
-		log.Println("Client stopped")
-	}
 }
