@@ -48,11 +48,21 @@ func main() {
 				Aliases: []string{"c"},
 				Sources: cli.EnvVars("SPB_CHANNEL"),
 			},
+			&cli.StringFlag{
+				Name:    "login",
+				Value:   "bot",
+				Usage:   "login identity: bot | user (user is required to read channel history, e.g. dedup)",
+				Sources: cli.EnvVars("SPB_LOGIN"),
+			},
+			&cli.StringFlag{
+				Name:    "phone",
+				Usage:   "phone number for user login (e.g. +8613800138000)",
+				Sources: cli.EnvVars("SPB_PHONE"),
+			},
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			apiId := c.Int("api-id")
 			apiHash := c.String("api-hash")
-			botToken := c.String("bot-token")
 
 			if apiId <= 0 {
 				return ctx, fmt.Errorf("missing api-id")
@@ -60,10 +70,23 @@ func main() {
 			if apiHash == "" {
 				return ctx, fmt.Errorf("missing api-hash")
 			}
-			if botToken == "" {
-				return ctx, fmt.Errorf("missing bot-token")
+
+			var client *tg.Client
+			var err error
+			if c.String("login") == "user" {
+				// 用户账号登录：能读取频道历史(bot 无此权限)
+				phone := c.String("phone")
+				if phone == "" {
+					return ctx, fmt.Errorf("missing phone (required for --login user)")
+				}
+				client, err = tg.NewUserClient(ctx, apiId, apiHash, phone)
+			} else {
+				botToken := c.String("bot-token")
+				if botToken == "" {
+					return ctx, fmt.Errorf("missing bot-token")
+				}
+				client, err = tg.NewClient(ctx, apiId, apiHash, botToken)
 			}
-			client, err := tg.NewClient(ctx, apiId, apiHash, botToken)
 			if err != nil {
 				return ctx, err
 			}
@@ -80,6 +103,7 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			cmd.FileCmd,
+			cmd.DedupCmd,
 		},
 	}
 

@@ -2,8 +2,7 @@
 .gocache/
 .idea/
 .claude/
-/pikpak
-/pikpak.exe
+/squirrel_porter_bot.exe
 
 # CodeGraph data files
 # These are local to each machine and should not be committed

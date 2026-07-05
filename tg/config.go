@@ -33,6 +33,17 @@ func SessionFile() (string, error) {
 	return path, nil
 }
 
+// UserSessionFile 用户账号(手机号)登录的独立 session 文件，
+// 与 bot 的 session.db 分开存，避免两种身份的鉴权数据混在一起冲突。
+func UserSessionFile() (string, error) {
+	dir, err := configDir()
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, "user_session.db")
+	return path, nil
+}
+
 type ctxKey struct{}
 
 var key = ctxKey{}
