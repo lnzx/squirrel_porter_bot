@@ -24,6 +24,10 @@ var CloneCmd = &cli.Command{
 			Name:  "to",
 			Usage: "target channel username (without @); defaults to global --channel",
 		},
+		&cli.IntFlag{
+			Name:  "min-id",
+			Usage: "resume: only clone source messages with ID greater than this (0 = all)",
+		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		from := c.String("from")
@@ -38,10 +42,11 @@ var CloneCmd = &cli.Command{
 			return errors.New("source and target channel must differ")
 		}
 
+		minID := c.Int("min-id")
 		client := tg.FromContext(ctx)
 		if client == nil {
 			return errors.New("client not initialized (use --login user)")
 		}
-		return client.CloneChannel(from, to)
+		return client.CloneChannel(from, to, minID)
 	},
 }

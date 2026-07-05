@@ -134,10 +134,13 @@ squirrel_porter_bot --login user --phone +8613800138000 clone --from <src_channe
 - **caption 带过来**：媒体说明文字默认保留。
 - **按发布顺序**：按消息 ID 升序（即发布时间顺序）搬运。
 
+逐条（相册整组）转发，遇到 `FLOOD_WAIT` 按服务端要求等待、遇到临时 `5xx`（如 `WORKER_BUSY_TOO_LONG_RETRY`）自动退避重试。
+
 | Flag | 别名 | 默认 | 说明 |
 | --- | --- | --- | --- |
 | `--from` | `-f` | | 源频道用户名（不带 `@`），必填 |
 | `--to` | | 全局 `--channel` | 目标频道用户名（不带 `@`）；不填则退回全局 `-c` |
+| `--min-id` | | `0` | 断点续传：只克隆源频道中 ID 大于此值的消息（`0` 表示全部） |
 
 示例：
 
@@ -147,6 +150,9 @@ squirrel_porter_bot --login user clone --from src_channel --to dst_channel
 
 # 目标频道用全局 -c 传，命令只写源频道
 squirrel_porter_bot --login user -c dst_channel clone -f src_channel
+
+# 断点续传：上次中断在源消息 102，重跑时跳过 <=102 的部分
+squirrel_porter_bot --login user clone -f src_channel --to dst_channel --min-id 102
 ```
 
 > 注意：若源频道开启了「限制保存内容（noforwards）」，转发会被 Telegram 拒绝，此时无法克隆。
@@ -159,4 +165,5 @@ squirrel_porter_bot --login user -c dst_channel clone -f src_channel
 squirrel_porter_bot --help
 squirrel_porter_bot file --help
 squirrel_porter_bot file upload --help
+squirrel_porter_bot clone --help
 ```
