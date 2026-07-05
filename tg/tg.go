@@ -43,6 +43,8 @@ func (c *Client) getChatIdByUsername(username string) (int64, error) {
 }
 
 func (c *Client) Stop() {
-	c.client.Stop()
-	log.Println("Client stopped")
+	if c.client != nil {
+		c.client.Stop()
+		log.Println("Client stopped")
+	}
 }
