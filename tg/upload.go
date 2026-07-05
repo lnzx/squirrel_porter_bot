@@ -131,7 +131,7 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 				File:     f,
 				MimeType: "video/mp4",
 				Attributes: []tg.DocumentAttributeClass{
-					&tg.DocumentAttributeFilename{FileName: caption},
+					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 					&tg.DocumentAttributeVideo{
 						SupportsStreaming: true,
 					},
