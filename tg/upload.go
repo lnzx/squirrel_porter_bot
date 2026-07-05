@@ -11,10 +11,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/gotd/td/telegram/uploader"
 	"github.com/gotd/td/tg"
+	"github.com/schollz/progressbar/v3"
 )
 
 func (c *Client) Upload(channel string, targets []string, caption string, separate bool) error {
@@ -74,16 +74,21 @@ func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string)
 }
 
 // sendSinglePhoto 上传图片
-func (c *Client) sendSinglePhoto(chatId int64, img string, caption string) error {
+func (c *Client) sendSinglePhoto(chatId int64, path string, caption string) error {
 	ctx := c.Ctx
 	// 1. 上传文件到 Telegram（还没发给任何人）
-	f, err := c.newUploader().FromPath(ctx, img)
+	up, err := c.newUploader(path)
+	if err != nil {
+		return err
+	}
+
+	f, err := up.FromPath(ctx, path)
 	if err != nil {
 		return err
 	}
 
 	if caption == "" {
-		caption = filepath.Base(img)
+		caption = filepath.Base(path)
 	}
 
 	_, err = ctx.SendMedia(chatId, &tg.MessagesSendMediaRequest{
@@ -97,17 +102,20 @@ func (c *Client) sendSinglePhoto(chatId int64, img string, caption string) error
 }
 
 // sendSingleVideo 只上传mp4视频
-func (c *Client) sendSingleVideo(chatId int64, video string, caption string) error {
+func (c *Client) sendSingleVideo(chatId int64, path string, caption string) error {
 	ctx := c.Ctx
-	up := c.newUploader()
+	up, err := c.newUploader(path)
+	if err != nil {
+		return err
+	}
 
-	videoFile, err := up.FromPath(ctx, video)
+	videoFile, err := up.FromPath(ctx, path)
 	if err != nil {
 		return err
 	}
 
 	if caption == "" {
-		caption = filepath.Base(video)
+		caption = filepath.Base(path)
 	}
 
 	doc := &tg.InputMediaUploadedDocument{
@@ -122,7 +130,7 @@ func (c *Client) sendSingleVideo(chatId int64, video string, caption string) err
 	}
 
 	// 和视频同名的jpg文件是封面
-	thumbPath := replaceExt(video, ".jpg")
+	thumbPath := replaceExt(path, ".jpg")
 	if _, err = os.Stat(thumbPath); err == nil {
 		fmt.Println("thumb:", thumbPath)
 		if thumb, err := up.FromPath(ctx, thumbPath); err == nil {
@@ -140,7 +148,6 @@ func (c *Client) sendSingleVideo(chatId int64, video string, caption string) err
 
 func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	ctx := c.Ctx
-	up := c.newUploader()
 
 	peer, err := ctx.ResolveInputPeerById(chatId)
 	if err != nil {
@@ -149,6 +156,11 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 
 	multiMedia := make([]tg.InputSingleMedia, 0, len(paths))
 	for i, path := range paths {
+		up, err := c.newUploader(path)
+		if err != nil {
+			return err
+		}
+
 		// 1. 逐个上传文件
 		f, err := up.FromPath(ctx, path)
 		if err != nil {
@@ -254,16 +266,23 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	return err
 }
 
-func (c *Client) newUploader() *uploader.Uploader {
+func (c *Client) newUploader(path string) (*uploader.Uploader, error) {
 	threads := c.UploadThreads
 	if threads <= 0 {
 		threads = defaultThreads // 默认线程数
 	}
 
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	bar := progressbar.DefaultBytes(info.Size(), filepath.Base(path))
+
 	return uploader.NewUploader(c.Ctx.Raw).
 		WithThreads(threads).
 		WithPartSize(uploader.MaximumPartSize).
-		WithProgress(&consoleProgress{}) // 每次调用都是新实例，天然按文件独立算百分比
+		WithProgress(&barProgress{bar: bar}), nil
 }
 
 // ResolveGlobPaths 接收原始参数列表，返回展开后的文件路径列表
@@ -344,29 +363,11 @@ func getVideoAttrs(path string) (w, h int, duration float64, err error) {
 	return 0, 0, 0, fmt.Errorf("no video stream found")
 }
 
-type consoleProgress struct {
-	mu      sync.Mutex
-	lastPct int
+type barProgress struct {
+	bar *progressbar.ProgressBar
 }
 
-func (p *consoleProgress) Chunk(ctx context.Context, state uploader.ProgressState) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if state.Total <= 0 {
-		fmt.Printf("\r%s: 已上传 %d 字节", state.Name, state.Uploaded)
-		return nil
-	}
-
-	pct := int(float64(state.Uploaded) / float64(state.Total) * 100)
-	if pct == p.lastPct {
-		return nil
-	}
-	p.lastPct = pct
-
-	fmt.Printf("\r%s: %d%%", state.Name, pct)
-	if pct >= 100 {
-		fmt.Println()
-	}
+func (p *barProgress) Chunk(ctx context.Context, state uploader.ProgressState) error {
+	_ = p.bar.Set64(state.Uploaded) // Uploaded 本身就是累计值，直接设置即可
 	return nil
 }
