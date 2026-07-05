@@ -1,0 +1,30 @@
+.codex_gocache/
+.gocache/
+.idea/
+.claude/
+/pikpak
+/pikpak.exe
+
+# CodeGraph data files
+# These are local to each machine and should not be committed
+.codegraph
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Cache
+cache/
+
+# Logs
+*.log
+
+# Hook markers
+.dirty
+
+.claude
+
+.reasonix
+
+*.session
