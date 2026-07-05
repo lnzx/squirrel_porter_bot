@@ -80,7 +80,10 @@ func main() {
 			cmd.FileCmd,
 		},
 		After: func(ctx context.Context, c *cli.Command) error {
-			tg.FromContext(ctx).Stop()
+			client := tg.FromContext(ctx)
+			if client != nil {
+				client.Stop()
+			}
 			return nil
 		},
 	}
