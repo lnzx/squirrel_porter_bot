@@ -15,7 +15,7 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-func (c *Client) Upload(channel string, targets []string, caption string) error {
+func (c *Client) Upload(channel string, targets []string, caption string, separate bool) error {
 	fmt.Println("caption:", caption)
 
 	// 使用新的过滤函数
@@ -44,8 +44,28 @@ func (c *Client) Upload(channel string, targets []string, caption string) error 
 		return c.sendSinglePhoto(chatId, path, caption)
 	}
 
-	// 多文件 专辑
+	// 多文件：根据 separate 决定用相册还是逐个发送
+	if separate {
+		return c.sendFilesOneByOne(chatId, files, caption)
+	}
 	return c.sendAlbum(chatId, files, caption)
+}
+
+// sendFilesOneByOne 逐个上传文件，每个文件独立成一条消息
+func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string) error {
+	for _, path := range files {
+		var err error
+		if strings.ToLower(filepath.Ext(path)) == ".mp4" {
+			err = c.sendSingleVideo(chatId, path, caption)
+		} else {
+			err = c.sendSinglePhoto(chatId, path, caption)
+		}
+		if err != nil {
+			log.Printf("上传文件失败, 跳过 %s: %s\n", path, err)
+			continue
+		}
+	}
+	return nil
 }
 
 // sendSinglePhoto 上传图片

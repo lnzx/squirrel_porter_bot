@@ -30,6 +30,11 @@ var UploadCmd = &cli.Command{
 			Aliases: []string{"c"},
 			Usage:   "media caption",
 		},
+		&cli.BoolFlag{
+			Name:    "separate",
+			Aliases: []string{"s"},
+			Usage:   "upload files one by one, each file is an independent message",
+		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		if c.NArg() < 1 {
@@ -41,8 +46,9 @@ var UploadCmd = &cli.Command{
 		}
 		channel := c.String("channel")
 		caption := c.String("caption")
+		separate := c.Bool("separate")
 		client := tg.FromContext(ctx) // ← 这里拿到之前 Before 里存的 tg.Context
-		return client.Upload(channel, targets, caption)
+		return client.Upload(channel, targets, caption, separate)
 	},
 }
 
