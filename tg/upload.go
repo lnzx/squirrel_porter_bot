@@ -53,7 +53,10 @@ func (c *Client) Upload(channel string, targets []string, caption string, separa
 
 // sendFilesOneByOne 逐个上传文件，每个文件独立成一条消息
 func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string) error {
-	for _, path := range files {
+	log.Println("upload files one by one, total:", len(files))
+	for i, path := range files {
+		log.Printf("%d uploading %s\n", i, path)
+
 		var err error
 		if strings.ToLower(filepath.Ext(path)) == ".mp4" {
 			err = c.sendSingleVideo(chatId, path, caption)
@@ -61,7 +64,7 @@ func (c *Client) sendFilesOneByOne(chatId int64, files []string, caption string)
 			err = c.sendSinglePhoto(chatId, path, caption)
 		}
 		if err != nil {
-			log.Printf("上传文件失败, 跳过 %s: %s\n", path, err)
+			log.Printf("%d 上传文件失败, 跳过 %s: %s\n", i, path, err)
 			continue
 		}
 	}
