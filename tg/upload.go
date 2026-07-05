@@ -2,6 +2,7 @@ package tg
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -121,15 +122,22 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			return err
 		}
 
-		suffix := strings.ToLower(filepath.Ext(path))
-
 		// 2. 根据是不是图片选择 InputMedia 类型
 		var media tg.InputMediaClass
-		if suffix == ".mp4" {
-			// 如果是文档/视频：
-			doc := &tg.InputMediaUploadedDocument{
+		if strings.ToLower(filepath.Ext(path)) == ".mp4" { // 如果是文档/视频
+			// 和视频同名的jpg文件是封面
+			thumbPath := replaceExt(path, ".jpg")
+			var thumb tg.InputFileClass
+			if _, err = os.Stat(thumbPath); err == nil {
+				fmt.Println("thumb:", thumbPath)
+				if thumb, err = up.FromPath(ctx, thumbPath); err != nil {
+					log.Println(err)
+				}
+			}
+			media = &tg.InputMediaUploadedDocument{
 				File:     f,
 				MimeType: "video/mp4",
+				Thumb:    thumb,
 				Attributes: []tg.DocumentAttributeClass{
 					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 					&tg.DocumentAttributeVideo{
@@ -137,15 +145,6 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 					},
 				},
 			}
-			// 和视频同名的jpg文件是封面
-			thumbPath := replaceExt(path, ".jpg")
-			if _, err = os.Stat(thumbPath); err == nil {
-				fmt.Println("thumb:", thumbPath)
-				if thumb, err := up.FromPath(ctx, thumbPath); err == nil {
-					doc.Thumb = thumb
-				}
-			}
-			media = doc
 		} else {
 			media = &tg.InputMediaUploadedPhoto{File: f}
 		}
