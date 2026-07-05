@@ -29,20 +29,7 @@ func SessionFile() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	path := filepath.Join(dir, "session.json")
-
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		f, err := os.Create(path)
-		if err != nil {
-			return "", fmt.Errorf("create session file: %w", err)
-		}
-		defer f.Close()
-
-	} else if err != nil {
-		return "", fmt.Errorf("stat session file: %w", err)
-	}
-
+	path := filepath.Join(dir, "session.db")
 	return path, nil
 }
 
