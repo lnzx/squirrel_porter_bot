@@ -146,8 +146,7 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			var w, h int
 			var duration float64
 			if w, h, duration, err = getVideoAttrs(path); err != nil {
-				// 如果获取失败，可以给个默认值或直接报错
-				log.Println("get video attrs failed", err)
+				return err
 			}
 
 			uploaded = &tg.InputMediaUploadedDocument{
@@ -207,14 +206,16 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			return fmt.Errorf("unexpected media type %T for %s", registered, path)
 		}
 
-		if caption == "" {
-			caption = filepath.Base(path)
+		// 4. 每个文件独立的 Message：caption 有值就用 caption，没有就用自己的文件名
+		msg := caption
+		if msg == "" {
+			msg = filepath.Base(path)
 		}
 
 		multiMedia = append(multiMedia, tg.InputSingleMedia{
 			Media:    media,
 			RandomID: rand.Int63(), // 每个条目必须有唯一的 RandomID
-			Message:  caption,      // 相册里通常只有第一条的文字会显示为整条消息的说明
+			Message:  msg,          // 相册里通常只有第一条的文字会显示为整条消息的说明
 		})
 	}
 
