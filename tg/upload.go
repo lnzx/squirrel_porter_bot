@@ -1,11 +1,14 @@
 package tg
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gotd/td/telegram/uploader"
@@ -134,6 +137,15 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 					log.Println(err)
 				}
 			}
+
+			var w, h int
+			var duration float64
+			if w, h, duration, err = getVideoAttrs(path); err != nil {
+				// 如果获取失败，可以给个默认值或直接报错
+				log.Println("get video attrs failed", err)
+			}
+			fmt.Println("w:", w, "h:", h, "duration:", duration)
+
 			media = &tg.InputMediaUploadedDocument{
 				File:     f,
 				MimeType: "video/mp4",
@@ -142,6 +154,9 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 					&tg.DocumentAttributeVideo{
 						SupportsStreaming: true,
+						W:                 w,
+						H:                 h,
+						Duration:          duration,
 					},
 				},
 			}
@@ -213,4 +228,39 @@ func replaceExt(path, newExt string) string {
 	ext := filepath.Ext(path)
 	base := strings.TrimSuffix(path, ext)
 	return base + newExt
+}
+
+type videoInfo struct {
+	Streams []struct {
+		Width    int    `json:"width"`
+		Height   int    `json:"height"`
+		Duration string `json:"duration"`
+	} `json:"streams"`
+}
+
+func getVideoAttrs(path string) (w, h int, duration float64, err error) {
+	cmd := exec.Command("ffprobe",
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_streams",
+		path,
+	)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	var info videoInfo
+	if err := json.Unmarshal(output, &info); err != nil {
+		return 0, 0, 0, err
+	}
+	for _, s := range info.Streams {
+		if s.Width > 0 {
+			w, h = s.Width, s.Height
+			if s.Duration != "" {
+				duration, _ = strconv.ParseFloat(s.Duration, 64)
+			}
+			return w, h, duration, nil
+		}
+	}
+	return 0, 0, 0, fmt.Errorf("no video stream found")
 }
