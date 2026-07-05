@@ -104,6 +104,7 @@ func main() {
 		Commands: []*cli.Command{
 			cmd.FileCmd,
 			cmd.DedupCmd,
+			cmd.CloneCmd,
 		},
 	}
 
