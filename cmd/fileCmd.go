@@ -39,7 +39,7 @@ var UploadCmd = &cli.Command{
 			Name:    "threads",
 			Aliases: []string{"t"},
 			Value:   4,
-			Usage:   "sets downloading goroutines limit",
+			Usage:   "sets uploading goroutines limit",
 		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
