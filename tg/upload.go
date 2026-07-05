@@ -128,16 +128,6 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 		// 2. 根据是不是图片选择 InputMedia 类型
 		var media tg.InputMediaClass
 		if strings.ToLower(filepath.Ext(path)) == ".mp4" { // 如果是文档/视频
-			// 和视频同名的jpg文件是封面
-			thumbPath := replaceExt(path, ".jpg")
-			var thumb tg.InputFileClass
-			if _, err = os.Stat(thumbPath); err == nil {
-				fmt.Println("thumb:", thumbPath)
-				if thumb, err = up.FromPath(ctx, thumbPath); err != nil {
-					log.Println(err)
-				}
-			}
-
 			var w, h int
 			var duration float64
 			if w, h, duration, err = getVideoAttrs(path); err != nil {
@@ -149,7 +139,6 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			media = &tg.InputMediaUploadedDocument{
 				File:     f,
 				MimeType: "video/mp4",
-				Thumb:    thumb,
 				Attributes: []tg.DocumentAttributeClass{
 					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 					&tg.DocumentAttributeVideo{
