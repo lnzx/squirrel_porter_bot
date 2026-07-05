@@ -117,8 +117,13 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	ctx := c.Ctx
 	up := uploader.NewUploader(ctx.Raw)
 
+	peer, err := ctx.ResolveInputPeerById(chatId)
+	if err != nil {
+		return err
+	}
+
 	multiMedia := make([]tg.InputSingleMedia, 0, len(paths))
-	for i, path := range paths {
+	for _, path := range paths {
 		// 1. 逐个上传文件
 		f, err := up.FromPath(ctx, path)
 		if err != nil {
@@ -126,19 +131,29 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 		}
 
 		// 2. 根据是不是图片选择 InputMedia 类型
-		var media tg.InputMediaClass
+		var uploaded tg.InputMediaClass
 		if strings.ToLower(filepath.Ext(path)) == ".mp4" { // 如果是文档/视频
+			// 和视频同名的jpg文件是封面
+			thumbPath := replaceExt(path, ".jpg")
+			var thumb tg.InputFileClass
+			if _, err = os.Stat(thumbPath); err == nil {
+				fmt.Println("thumb:", thumbPath)
+				if thumb, err = up.FromPath(ctx, thumbPath); err != nil {
+					log.Println("upload thumb error: ", err)
+				}
+			}
+
 			var w, h int
 			var duration float64
 			if w, h, duration, err = getVideoAttrs(path); err != nil {
 				// 如果获取失败，可以给个默认值或直接报错
 				log.Println("get video attrs failed", err)
 			}
-			fmt.Println("w:", w, "h:", h, "duration:", duration)
 
-			media = &tg.InputMediaUploadedDocument{
+			uploaded = &tg.InputMediaUploadedDocument{
 				File:     f,
 				MimeType: "video/mp4",
+				Thumb:    thumb,
 				Attributes: []tg.DocumentAttributeClass{
 					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 					&tg.DocumentAttributeVideo{
@@ -150,27 +165,61 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 				},
 			}
 		} else {
-			media = &tg.InputMediaUploadedPhoto{File: f}
+			uploaded = &tg.InputMediaUploadedPhoto{File: f}
 		}
 
-		// 3. 逻辑修复：只有第一项(i==0)才带 caption
-		msg := ""
-		if i == 0 {
-			if caption == "" {
-				caption = filepath.Base(path)
+		// 关键一步：先注册成正式媒体，拿到带 file_reference 的对象
+		registered, err := ctx.Raw.MessagesUploadMedia(ctx, &tg.MessagesUploadMediaRequest{
+			Peer:  peer,
+			Media: uploaded,
+		})
+		if err != nil {
+			return fmt.Errorf("uploadMedia failed for %s: %w", path, err)
+		}
+
+		var media tg.InputMediaClass
+		switch m := registered.(type) {
+		case *tg.MessageMediaDocument:
+			d, ok := m.Document.(*tg.Document)
+			if !ok {
+				return fmt.Errorf("empty document for %s", path)
 			}
-			msg = caption
+			media = &tg.InputMediaDocument{
+				ID: &tg.InputDocument{
+					ID:            d.ID,
+					AccessHash:    d.AccessHash,
+					FileReference: d.FileReference,
+				},
+			}
+		case *tg.MessageMediaPhoto:
+			p, ok := m.Photo.(*tg.Photo)
+			if !ok {
+				return fmt.Errorf("empty photo for %s", path)
+			}
+			media = &tg.InputMediaPhoto{
+				ID: &tg.InputPhoto{
+					ID:            p.ID,
+					AccessHash:    p.AccessHash,
+					FileReference: p.FileReference,
+				},
+			}
+		default:
+			return fmt.Errorf("unexpected media type %T for %s", registered, path)
+		}
+
+		if caption == "" {
+			caption = filepath.Base(path)
 		}
 
 		multiMedia = append(multiMedia, tg.InputSingleMedia{
 			Media:    media,
 			RandomID: rand.Int63(), // 每个条目必须有唯一的 RandomID
-			Message:  msg,          // 相册里通常只有第一条的文字会显示为整条消息的说明
+			Message:  caption,      // 相册里通常只有第一条的文字会显示为整条消息的说明
 		})
 	}
 
 	// 3. 一次性把整个相册发出去
-	_, err := ctx.SendMultiMedia(chatId, &tg.MessagesSendMultiMediaRequest{
+	_, err = ctx.SendMultiMedia(chatId, &tg.MessagesSendMultiMediaRequest{
 		MultiMedia: multiMedia,
 	})
 	return err
