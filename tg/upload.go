@@ -145,6 +145,7 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 					doc.Thumb = thumb
 				}
 			}
+			media = doc
 		} else {
 			media = &tg.InputMediaUploadedPhoto{File: f}
 		}
