@@ -114,7 +114,7 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 	up := uploader.NewUploader(ctx.Raw)
 
 	multiMedia := make([]tg.InputSingleMedia, 0, len(paths))
-	for _, path := range paths {
+	for i, path := range paths {
 		// 1. 逐个上传文件
 		f, err := up.FromPath(ctx, path)
 		if err != nil {
@@ -150,10 +150,19 @@ func (c *Client) sendAlbum(chatId int64, paths []string, caption string) error {
 			media = &tg.InputMediaUploadedPhoto{File: f}
 		}
 
+		// 3. 逻辑修复：只有第一项(i==0)才带 caption
+		msg := ""
+		if i == 0 {
+			if caption == "" {
+				caption = filepath.Base(path)
+			}
+			msg = caption
+		}
+
 		multiMedia = append(multiMedia, tg.InputSingleMedia{
 			Media:    media,
 			RandomID: rand.Int63(), // 每个条目必须有唯一的 RandomID
-			Message:  caption,      // 相册里通常只有第一条的文字会显示为整条消息的说明
+			Message:  msg,          // 相册里通常只有第一条的文字会显示为整条消息的说明
 		})
 	}
 
