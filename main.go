@@ -54,11 +54,6 @@ func main() {
 			apiHash := c.String("api-hash")
 			botToken := c.String("bot-token")
 
-			log.Println("api-id:", apiId)
-			log.Println("api-hash:", apiHash)
-			log.Println("bot-token:", botToken)
-			log.Println("channel:", c.String("channel"))
-
 			if apiId <= 0 {
 				return ctx, fmt.Errorf("missing api-id")
 			}
