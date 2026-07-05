@@ -1,6 +1,6 @@
 # squirrel_porter_bot
 
-一个命令行 Telegram bot（基于 [urfave/cli v3](https://github.com/urfave/cli) + [gotgproto](https://github.com/celestix/gotgproto)），用于在频道之间搬运文件：上传本地文件、下载频道媒体、清理频道内重复文件。
+一个命令行 Telegram bot（基于 [urfave/cli v3](https://github.com/urfave/cli) + [gotgproto](https://github.com/celestix/gotgproto)），用于在频道之间搬运文件：上传本地文件、下载频道媒体、清理频道内重复文件、克隆整个频道到另一个频道。
 
 ## 构建
 
@@ -117,6 +117,39 @@ squirrel_porter_bot --login user -c my_channel dedup
 # 2. 确认无误后执行删除
 squirrel_porter_bot --login user -c my_channel dedup --confirm
 ```
+
+### clone — 克隆一个频道到另一个频道
+
+把源频道的全部历史消息「克隆」到目标频道。**需要 `--login user` 登录**（bot 无法读取频道历史），且账号在源、目标两个频道都要有相应权限。
+
+```shell
+squirrel_porter_bot --login user --phone +8613800138000 clone --from <src_channel> --to <dst_channel>
+```
+
+底层用 `messages.forwardMessages` + `drop_author` 做服务端搬运（不下载、不重传），因此：
+
+- **保真且快**：直接引用源消息的媒体，不重新下载/上传。
+- **等同重新发布**：`drop_author` 去掉「转发自 XXX」抬头，看不出是转发。
+- **相册原封保留**：同一相册（media group）整组一次转发，落地仍是相册。
+- **caption 带过来**：媒体说明文字默认保留。
+- **按发布顺序**：按消息 ID 升序（即发布时间顺序）搬运。
+
+| Flag | 别名 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `--from` | `-f` | | 源频道用户名（不带 `@`），必填 |
+| `--to` | | 全局 `--channel` | 目标频道用户名（不带 `@`）；不填则退回全局 `-c` |
+
+示例：
+
+```shell
+# 显式指定源、目标频道
+squirrel_porter_bot --login user clone --from src_channel --to dst_channel
+
+# 目标频道用全局 -c 传，命令只写源频道
+squirrel_porter_bot --login user -c dst_channel clone -f src_channel
+```
+
+> 注意：若源频道开启了「限制保存内容（noforwards）」，转发会被 Telegram 拒绝，此时无法克隆。
 
 ## 帮助
 
