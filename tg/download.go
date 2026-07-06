@@ -114,7 +114,13 @@ func (c *Client) DownloadFromLink(link string, output string, threads int, partS
 			PartSize: actualPartSize,
 		},
 	)
-	return err
+	if err != nil {
+		// 下载失败：关闭并删除半截/空文件，避免留下损坏的残留
+		_ = f.Close()
+		_ = os.Remove(fileName)
+		return err
+	}
+	return nil
 }
 
 // generateSmartName 优先获取标题，如果标题为空，则退回原始文件名

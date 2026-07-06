@@ -55,6 +55,9 @@ var UploadCmd = &cli.Command{
 		separate := c.Bool("separate")
 		threads := c.Int("threads")
 		client := tg.FromContext(ctx) // ← 这里拿到之前 Before 里存的 tg.Context
+		if client == nil {
+			return errors.New("client not initialized")
+		}
 		client.UploadThreads = threads
 		return client.Upload(channel, targets, caption, separate)
 	},
@@ -93,6 +96,9 @@ var DownloadCmd = &cli.Command{
 		threads := c.Int("threads")
 		partSize := c.Int("part-size")
 		client := tg.FromContext(ctx)
+		if client == nil {
+			return errors.New("client not initialized")
+		}
 		return client.DownloadFromLink(link, output, threads, partSize)
 	},
 }

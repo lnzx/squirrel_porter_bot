@@ -46,10 +46,15 @@ func (c *Client) ScanDuplicates(channel string) ([]DupGroup, error) {
 	offsetID := 0
 	const limit = 100
 	for {
-		res, err := ctx.Raw.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
-			Peer:     peer,
-			OffsetID: offsetID,
-			Limit:    limit,
+		var res tg.MessagesMessagesClass
+		err := withFloodRetry("读取频道历史", func() error {
+			var e error
+			res, e = ctx.Raw.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{
+				Peer:     peer,
+				OffsetID: offsetID,
+				Limit:    limit,
+			})
+			return e
 		})
 		if err != nil {
 			return nil, err
@@ -132,9 +137,12 @@ func (c *Client) DeleteMessages(channel string, ids []int) (int, error) {
 		if end > len(ids) {
 			end = len(ids)
 		}
-		if _, err = ctx.Raw.ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{
-			Channel: inputChannel,
-			ID:      ids[i:end],
+		if err = withFloodRetry("删除消息", func() error {
+			_, e := ctx.Raw.ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{
+				Channel: inputChannel,
+				ID:      ids[i:end],
+			})
+			return e
 		}); err != nil {
 			return deleted, err
 		}

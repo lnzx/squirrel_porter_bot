@@ -28,6 +28,12 @@ var CloneCmd = &cli.Command{
 			Name:  "min-id",
 			Usage: "resume: only clone source messages with ID greater than this (0 = all)",
 		},
+		&cli.IntFlag{
+			Name:    "batch",
+			Aliases: []string{"b"},
+			Value:   20,
+			Usage:   "messages per forward call (larger = faster but more server load; 1-100)",
+		},
 	},
 	Action: func(ctx context.Context, c *cli.Command) error {
 		from := c.String("from")
@@ -43,10 +49,11 @@ var CloneCmd = &cli.Command{
 		}
 
 		minID := c.Int("min-id")
+		batchSize := c.Int("batch")
 		client := tg.FromContext(ctx)
 		if client == nil {
 			return errors.New("client not initialized (use --login user)")
 		}
-		return client.CloneChannel(from, to, minID)
+		return client.CloneChannel(from, to, minID, batchSize)
 	},
 }

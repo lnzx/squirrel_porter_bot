@@ -214,10 +214,12 @@ func (c *Client) sendAlbumBatch(chatId int64, paths []string, caption string) er
 				}
 			}
 
-			var w, h int
-			var duration float64
-			if w, h, duration, err = getVideoAttrs(path); err != nil {
-				return err
+			videoAttr := &tg.DocumentAttributeVideo{SupportsStreaming: true}
+			// 与单文件路径一致：取不到宽/高/时长时降级为仅流式发送，不因个别文件探测失败中断整个相册
+			if w, h, duration, err := getVideoAttrs(path); err != nil {
+				log.Println("get video attrs error, send without dimensions:", err)
+			} else {
+				videoAttr.W, videoAttr.H, videoAttr.Duration = w, h, duration
 			}
 
 			uploaded = &tg.InputMediaUploadedDocument{
@@ -226,12 +228,7 @@ func (c *Client) sendAlbumBatch(chatId int64, paths []string, caption string) er
 				Thumb:    thumb,
 				Attributes: []tg.DocumentAttributeClass{
 					&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
-					&tg.DocumentAttributeVideo{
-						SupportsStreaming: true,
-						W:                 w,
-						H:                 h,
-						Duration:          duration,
-					},
+					videoAttr,
 				},
 			}
 		} else {
@@ -375,6 +372,9 @@ type videoInfo struct {
 		Height   int    `json:"height"`
 		Duration string `json:"duration"`
 	} `json:"streams"`
+	Format struct {
+		Duration string `json:"duration"`
+	} `json:"format"`
 }
 
 func getVideoAttrs(path string) (w, h int, duration float64, err error) {
@@ -382,6 +382,7 @@ func getVideoAttrs(path string) (w, h int, duration float64, err error) {
 		"-v", "quiet",
 		"-print_format", "json",
 		"-show_streams",
+		"-show_format",
 		path,
 	)
 	output, err := cmd.Output()
@@ -397,6 +398,10 @@ func getVideoAttrs(path string) (w, h int, duration float64, err error) {
 			w, h = s.Width, s.Height
 			if s.Duration != "" {
 				duration, _ = strconv.ParseFloat(s.Duration, 64)
+			}
+			// 部分 mp4 的时长只写在 format 里、stream 内为空，回退取 format.duration
+			if duration == 0 && info.Format.Duration != "" {
+				duration, _ = strconv.ParseFloat(info.Format.Duration, 64)
 			}
 			return w, h, duration, nil
 		}
