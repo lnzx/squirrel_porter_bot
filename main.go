@@ -21,6 +21,27 @@ func init() {
 }
 
 func main() {
+	// 客户端生命周期 context：与 Ctrl+C 解耦，保证「正在进行的一批转发」不会被中途撕裂。
+	// 只有第二次 Ctrl+C（或程序正常结束）才取消它。
+	clientCtx, cancelClient := context.WithCancel(context.Background())
+	defer cancelClient()
+
+	// 优雅停止 context：第一次 Ctrl+C 取消它，长任务在「批 / 单元」边界检测到后干净收尾（如 clone 打印续传点）。
+	gracefulCtx, cancelGraceful := context.WithCancel(context.Background())
+	defer cancelGraceful()
+
+	// 两段式信号：第一次 = 优雅停止，第二次 = 强制退出
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+	go func() {
+		<-sigCh
+		_, _ = fmt.Fprintln(os.Stderr, "\n收到中断，正在收尾当前批次…（再按一次 Ctrl+C 强制退出）")
+		cancelGraceful()
+		<-sigCh
+		_, _ = fmt.Fprintln(os.Stderr, "\n强制退出")
+		cancelClient()
+	}()
+
 	root := &cli.Command{
 		Name:            "squirrel_porter_bot",
 		Usage:           "tg command-line bot",
@@ -79,19 +100,20 @@ func main() {
 				if phone == "" {
 					return ctx, fmt.Errorf("missing phone (required for --login user)")
 				}
-				client, err = tg.NewUserClient(ctx, apiId, apiHash, phone)
+				// 用 clientCtx 而非信号 ctx：Ctrl+C 不会撕裂正在进行的 RPC
+				client, err = tg.NewUserClient(clientCtx, apiId, apiHash, phone)
 			} else {
 				botToken := c.String("bot-token")
 				if botToken == "" {
 					return ctx, fmt.Errorf("missing bot-token")
 				}
-				client, err = tg.NewClient(ctx, apiId, apiHash, botToken)
+				client, err = tg.NewClient(clientCtx, apiId, apiHash, botToken)
 			}
 			if err != nil {
 				return ctx, err
 			}
 			log.Println("new client ok")
-			// CreateContext 返回的 *ext.Context 建议全局复用，不要每个子命令重新创建
+			// 返回的 ctx 派生自 gracefulCtx：子命令据此在批边界优雅停止；同时携带已认证 client
 			return tg.WithContext(ctx, client), nil
 		},
 		After: func(ctx context.Context, c *cli.Command) error {
@@ -108,10 +130,7 @@ func main() {
 		},
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-
-	if err := root.Run(ctx, os.Args); err != nil {
+	if err := root.Run(gracefulCtx, os.Args); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

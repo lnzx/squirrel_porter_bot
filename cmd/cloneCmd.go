@@ -54,6 +54,6 @@ var CloneCmd = &cli.Command{
 		if client == nil {
 			return errors.New("client not initialized (use --login user)")
 		}
-		return client.CloneChannel(from, to, minID, batchSize)
+		return client.CloneChannel(ctx, from, to, minID, batchSize)
 	},
 }

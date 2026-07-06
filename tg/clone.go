@@ -1,6 +1,7 @@
 package tg
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -37,7 +38,9 @@ const (
 //
 // minID 用于断点续传：只克隆源频道中 ID 严格大于 minID 的消息（传 0 表示全部）。
 // 上次中断后，把「最后一条已成功克隆的源消息 ID」作为 minID 重跑即可跳过已搬运部分。
-func (c *Client) CloneChannel(from, to string, minID, batchSize int) error {
+// stopCtx 用于优雅停止：第一次 Ctrl+C 会取消它，本函数在「批边界」检测到后干净收尾，
+// 打印续传点后返回 nil（而非撕裂正在进行的转发批，避免续传时产生重复）。
+func (c *Client) CloneChannel(stopCtx context.Context, from, to string, minID, batchSize int) error {
 	ctx := c.Ctx
 
 	if batchSize <= 0 {
@@ -77,7 +80,7 @@ func (c *Client) CloneChannel(from, to string, minID, batchSize int) error {
 	}
 
 	// 1. 拉取源频道历史（可选跳过 ID <= minID 的部分），整理成「单元」列表
-	units, err := c.collectForwardUnits(fromID, minID)
+	units, err := c.collectForwardUnits(stopCtx, fromID, minID)
 	if err != nil {
 		return err
 	}
@@ -103,6 +106,11 @@ func (c *Client) CloneChannel(from, to string, minID, batchSize int) error {
 	sent := 0
 	lastID := minID
 	for _, ids := range batches {
+		// 批边界优雅停止：只在两批之间检查，不打断正在进行的批，保证 lastID 精确、续传不重复
+		if stopCtx.Err() != nil {
+			fmt.Printf("已优雅停止：已克隆 %d/%d 条，用 --min-id %d 续传\n", sent, total, lastID)
+			return nil
+		}
 		if err := c.forwardBatch(fromPeer, toPeer, ids); err != nil {
 			return fmt.Errorf("已克隆 %d/%d 条后中断，可用 --min-id %d 续传: %w",
 				sent, total, lastID, err)
@@ -121,7 +129,7 @@ func (c *Client) CloneChannel(from, to string, minID, batchSize int) error {
 // collectForwardUnits 遍历源频道历史，返回升序排列的转发单元列表。
 // 每个单元是一组消息 ID：普通消息为单元素切片，相册为同 grouped_id 的整组。
 // minID > 0 时只保留 ID 严格大于 minID 的消息（断点续传用）。
-func (c *Client) collectForwardUnits(fromID int64, minID int) ([][]int, error) {
+func (c *Client) collectForwardUnits(stopCtx context.Context, fromID int64, minID int) ([][]int, error) {
 	ctx := c.Ctx
 	peer, err := ctx.ResolveInputPeerById(fromID)
 	if err != nil {
@@ -137,6 +145,10 @@ func (c *Client) collectForwardUnits(fromID int64, minID int) ([][]int, error) {
 	offsetID := 0
 	const limit = 100
 	for {
+		// 拉取历史阶段也响应优雅停止：已翻到的照常处理，不再继续翻页
+		if stopCtx.Err() != nil {
+			break
+		}
 		var res tg.MessagesMessagesClass
 		err := withFloodRetry("读取源频道历史", func() error {
 			var e error
